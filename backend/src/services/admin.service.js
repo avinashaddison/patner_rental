@@ -16,7 +16,7 @@ import { notify } from './notification.service.js';
 import { isKycApproved } from './companions.service.js';
 import { emitToUser } from '../lib/socket.js';
 import { invalidateUserCache } from '../middleware/auth.js';
-import { uploadImageBuffer } from '../lib/cloudinary.js';
+import { uploadImageBuffer } from '../lib/r2.js';
 
 const { Prisma } = pkg;
 const D = (v) => new Prisma.Decimal(v ?? 0);
@@ -654,18 +654,19 @@ export async function featureCompanion(id, isFeatured, adminId) {
 
 /**
  * Admin manually adds a KYC document for a companion (e.g. onboarded offline).
- * Uploads the image to Cloudinary, records it as an APPROVED, admin-verified
+ * Uploads the image to R2, records it as an APPROVED, admin-verified
  * document, and auto-approves the companion if both docs are now approved and
  * they were still PENDING.
  * @param {string} companionId
  * @param {{docType:'GOVERNMENT_ID'|'SELFIE', documentNumber?:string, buffer:Buffer}} input
  */
-export async function addCompanionKyc(companionId, { docType, documentNumber, buffer }, adminId) {
+export async function addCompanionKyc(companionId, { docType, documentNumber, buffer, contentType }, adminId) {
   const companion = await loadCompanionOrThrow(companionId);
   const userId = companion.userId;
 
   const documentUrl = await uploadImageBuffer({
     buffer,
+    contentType,
     folder: 'companion-ranchi/kyc',
     publicId: `kyc-${userId}-${docType.toLowerCase()}-${Date.now()}`,
   });

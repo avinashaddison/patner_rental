@@ -36,7 +36,7 @@ import {
 
 const router = Router();
 
-// In-memory upload for category icons; streamed straight to Cloudinary (5 MB cap).
+// In-memory upload for category icons; streamed to R2 (5 MB cap).
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // ---- Auth (login is public; me requires admin) ----------------------------

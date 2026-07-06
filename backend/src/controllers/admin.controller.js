@@ -5,7 +5,7 @@ import { ok, created, ApiError } from '../utils/apiResponse.js';
 import { getPagination, buildMeta } from '../utils/pagination.js';
 import * as adminService from '../services/admin.service.js';
 import * as categoriesService from '../services/categories.service.js';
-import { uploadImageBuffer } from '../lib/cloudinary.js';
+import { uploadImageBuffer } from '../lib/r2.js';
 import { setSetting } from '../services/settings.service.js';
 
 // ---- Auth -----------------------------------------------------------------
@@ -102,6 +102,7 @@ export const addCompanionKyc = async (req, res) => {
       docType: req.body.docType,
       documentNumber: req.body.documentNumber,
       buffer: req.file.buffer,
+    contentType: req.file.mimetype,
     },
     req.admin.id,
   );
@@ -281,6 +282,7 @@ export const uploadCategoryIcon = async (req, res) => {
   const category = await categoriesService.getCategoryOrThrow(req.params.id);
   const iconUrl = await uploadImageBuffer({
     buffer: req.file.buffer,
+    contentType: req.file.mimetype,
     folder: 'companion-ranchi/categories',
     publicId: category.slug,
   });
@@ -297,13 +299,14 @@ export const deleteCategoryIcon = async (req, res) => {
 
 /**
  * POST /admin/settings/login-hero — upload the couple photo shown on the app's
- * login screen. Streams the in-memory file to Cloudinary, then stores the public
+ * login screen. Streams the in-memory file to R2, then stores the public
  * URL in the `login_hero_image_url` setting (surfaced via GET /meta/config).
  */
 export const uploadLoginHero = async (req, res) => {
   if (!req.file) throw ApiError.badRequest('No image file uploaded (field "image")');
   const url = await uploadImageBuffer({
     buffer: req.file.buffer,
+    contentType: req.file.mimetype,
     folder: 'companion-ranchi/settings',
     publicId: 'login-hero',
   });
@@ -335,7 +338,7 @@ function onboardingKey(slotRaw) {
 
 /**
  * POST /admin/settings/onboarding-hero/:slot — upload the photo for onboarding
- * step :slot (1-3). Stores the Cloudinary URL in `onboarding_image_{slot}`
+ * step :slot (1-3). Stores the R2 URL in `onboarding_image_{slot}`
  * (surfaced via GET /meta/config → onboardingImageUrls).
  */
 export const uploadOnboardingHero = async (req, res) => {
@@ -343,6 +346,7 @@ export const uploadOnboardingHero = async (req, res) => {
   const { slot, key } = onboardingKey(req.params.slot);
   const url = await uploadImageBuffer({
     buffer: req.file.buffer,
+    contentType: req.file.mimetype,
     folder: 'companion-ranchi/settings',
     publicId: `onboarding-${slot}`,
   });
@@ -375,7 +379,7 @@ function homeBannerKey(slotRaw) {
 
 /**
  * POST /admin/settings/home-banner/:slot — upload the promo image for the home
- * carousel slide :slot (1-3). Stores the Cloudinary URL in `home_banner_{slot}`
+ * carousel slide :slot (1-3). Stores the R2 URL in `home_banner_{slot}`
  * (surfaced via GET /meta/config → homeBannerImageUrls).
  */
 export const uploadHomeBanner = async (req, res) => {
@@ -383,6 +387,7 @@ export const uploadHomeBanner = async (req, res) => {
   const { slot, key } = homeBannerKey(req.params.slot);
   const url = await uploadImageBuffer({
     buffer: req.file.buffer,
+    contentType: req.file.mimetype,
     folder: 'companion-ranchi/settings',
     publicId: `home-banner-${slot}`,
   });

@@ -1,4 +1,4 @@
-// Category admin logic: list categories and manage their (Cloudinary-hosted) icons.
+// Category admin logic: list categories and manage their (R2-hosted) icons.
 // Categories themselves are seeded from src/config/constants.js; admins only edit icons.
 import { prisma } from '../lib/prisma.js';
 import { ApiError } from '../utils/apiResponse.js';
