@@ -93,6 +93,21 @@ export const featureCompanion = async (req, res) => {
   return ok(res, data);
 };
 
+/** POST /admin/companions/:id/kyc — admin manually uploads + approves a KYC document. */
+export const addCompanionKyc = async (req, res) => {
+  if (!req.file) throw ApiError.badRequest('No image file uploaded (field "image")');
+  const data = await adminService.addCompanionKyc(
+    req.params.id,
+    {
+      docType: req.body.docType,
+      documentNumber: req.body.documentNumber,
+      buffer: req.file.buffer,
+    },
+    req.admin.id,
+  );
+  return created(res, data);
+};
+
 // ---- KYC ------------------------------------------------------------------
 
 export const listKyc = async (req, res) => {

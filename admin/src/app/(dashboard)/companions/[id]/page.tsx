@@ -25,23 +25,27 @@ import {
   Ban,
   CheckCircle2,
   Clock,
+  IdCard,
   IndianRupee,
   Languages,
   MapPin,
+  ScanFace,
   ShieldCheck,
   ShieldX,
   Sparkles,
   Star,
   Tag,
+  Upload,
   XCircle,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Badge, StatusBadge } from '@/components/ui/Badge';
 import { LoadingState } from '@/components/ui/Spinner';
-import { swrFetcher, apiFetch, ApiError } from '@/lib/api';
+import { swrFetcher, apiFetch, ApiError, ADMIN_API_BASE, getToken } from '@/lib/api';
 import { formatINR, formatDate, formatDateTime } from '@/lib/format';
 import type { AdminCompanion, AdminKycDocument } from '@/lib/types';
 
@@ -341,6 +345,10 @@ export default function CompanionDetailPage() {
                 This companion has not submitted any KYC documents yet.
               </p>
             )}
+
+            {/* Admin manual upload — onboard a companion whose docs were collected
+                offline. Each upload is recorded as an approved, admin-verified doc. */}
+            {id && <AdminKycUpload companionId={id} onUploaded={() => mutate()} />}
           </Card>
         </div>
 
@@ -501,6 +509,147 @@ function BackLink() {
 
 function docTypeLabel(t: string) {
   return t === 'GOVERNMENT_ID' ? 'Government ID' : t === 'SELFIE' ? 'Selfie' : t;
+}
+
+/**
+ * Admin-side manual KYC upload. Lets an admin add a Government ID / Selfie for a
+ * companion onboarded offline — the image is uploaded and the document is stored
+ * as approved+admin-verified. Uploading both required docs auto-verifies KYC.
+ * Posts multipart to `POST /admin/companions/:id/kyc` (field "image" + docType).
+ */
+function AdminKycUpload({
+  companionId,
+  onUploaded,
+}: {
+  companionId: string;
+  onUploaded: () => void;
+}) {
+  const [docType, setDocType] = useState<'GOVERNMENT_ID' | 'SELFIE'>('GOVERNMENT_ID');
+  const [documentNumber, setDocumentNumber] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file (photo/scan of the document).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be under 5 MB.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setOkMsg(null);
+    try {
+      const form = new FormData();
+      form.append('image', file);
+      form.append('docType', docType);
+      if (documentNumber.trim()) form.append('documentNumber', documentNumber.trim());
+      const res = await fetch(`${ADMIN_API_BASE}/companions/${companionId}/kyc`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+        body: form,
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null;
+        throw new Error(body?.error?.message || `Upload failed (${res.status}).`);
+      }
+      setOkMsg(`${docTypeLabel(docType)} uploaded and approved.`);
+      setDocumentNumber('');
+      onUploaded();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Upload className="h-4 w-4 text-brand-600" />
+        <p className="text-sm font-semibold text-slate-800">Add a document (admin)</p>
+      </div>
+      <p className="mb-3 text-xs text-slate-500">
+        For companions onboarded offline. The image you upload is stored as an
+        approved, admin-verified document. Adding both a Government ID and a Selfie
+        marks KYC as verified.
+      </p>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="w-full sm:w-48">
+          <label className="mb-1 block text-xs font-medium text-slate-600">Document type</label>
+          <div className="flex gap-1 rounded-lg border border-slate-300 bg-white p-1">
+            <button
+              type="button"
+              onClick={() => setDocType('GOVERNMENT_ID')}
+              className={
+                'flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium ' +
+                (docType === 'GOVERNMENT_ID'
+                  ? 'bg-brand-600 text-white'
+                  : 'text-slate-600 hover:bg-slate-50')
+              }
+            >
+              <IdCard className="h-3.5 w-3.5" /> Gov ID
+            </button>
+            <button
+              type="button"
+              onClick={() => setDocType('SELFIE')}
+              className={
+                'flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium ' +
+                (docType === 'SELFIE'
+                  ? 'bg-brand-600 text-white'
+                  : 'text-slate-600 hover:bg-slate-50')
+              }
+            >
+              <ScanFace className="h-3.5 w-3.5" /> Selfie
+            </button>
+          </div>
+        </div>
+
+        {docType === 'GOVERNMENT_ID' && (
+          <Input
+            label="ID number (optional)"
+            value={documentNumber}
+            onChange={(e) => setDocumentNumber(e.target.value)}
+            placeholder="e.g. Aadhaar / PAN / DL no."
+            containerClassName="flex-1"
+          />
+        )}
+
+        <label className="shrink-0">
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={busy}
+            onChange={onFile}
+          />
+          <span
+            className={
+              'inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ' +
+              (busy
+                ? 'cursor-not-allowed bg-slate-200 text-slate-400'
+                : 'bg-brand-600 text-white hover:bg-brand-700')
+            }
+          >
+            <Upload className="h-4 w-4" />
+            {busy ? 'Uploading…' : `Upload ${docTypeLabel(docType)}`}
+          </span>
+        </label>
+      </div>
+
+      {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
+      {okMsg && <p className="mt-2 text-xs text-emerald-600">{okMsg}</p>}
+    </div>
+  );
 }
 
 function KycDocCard({
