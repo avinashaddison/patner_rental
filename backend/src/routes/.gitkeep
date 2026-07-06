@@ -1,0 +1,2 @@
+# Feature routers go here: <name>.routes.js (default-export an Express Router).
+# Auto-mounted at /api/<name> by routes/index.js.

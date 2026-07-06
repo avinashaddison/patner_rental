@@ -1,0 +1,69 @@
+# Render blueprint for the Companion Ranchi backend.
+# Deploy: push this repo to GitHub → Render → New → Blueprint → pick the repo.
+# Region is SINGAPORE on purpose: the Supabase Postgres lives in ap-southeast-1,
+# so co-locating the API there collapses the ~1.8s/query latency to ~ms — this
+# is also the app-speed fix.
+services:
+  - type: web
+    name: companion-ranchi-api
+    runtime: node
+    region: singapore
+    plan: starter # NOT free: free instances sleep after 15 min, which would drop
+                  # the IMAP mail-watcher and the payment webhook. Starter stays up.
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate
+    startCommand: node src/server.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # PORT is provided by Render automatically — do not set it.
+      # Everything below is set in the Render dashboard (Environment tab), NOT here,
+      # so secrets never live in the repo. See DEPLOY.md for the full list.
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: ADMIN_JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: API_BASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWKS_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_PUBLIC_BASE_URL
+        sync: false
+      - key: UPIQR_VPA
+        sync: false
+      - key: UPIQR_PAYEE_NAME
+        sync: false
+      - key: MAIL_IMAP_USER
+        sync: false
+      - key: MAIL_IMAP_PASS
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: UPIGATEWAY_KEY
+        sync: false

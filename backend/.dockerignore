@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log*
+.env
+.env.local
+.env.*.local
+*.log
+coverage
+dist
+build
+.git
+.gitignore
+.vscode
+.idea
+firebase-service-account.json
+serviceAccountKey.json
+*.pem
+README.md

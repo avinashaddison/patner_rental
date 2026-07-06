@@ -1,0 +1,118 @@
+name: companion_ranchi
+description: "Companion Ranchi - a premium, non-adult companionship marketplace (Ranchi, India)."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  # Dart 3.6 / Flutter 3.27+ for the wide-gamut Color API (withValues),
+  # CardThemeData/DialogThemeData and WidgetState* APIs used in the theme.
+  sdk: ">=3.6.0 <4.0.0"
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # Routing
+  go_router: ^14.2.0
+
+  # Networking
+  dio: ^5.5.0
+
+  # Secure storage
+  flutter_secure_storage: ^9.2.2
+
+  # Realtime
+  socket_io_client: ^2.0.3+1
+
+  # Formatting / i18n
+  intl: ^0.19.0
+
+  # Images
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+  image_picker: ^1.1.2
+
+  # Calendar (availability / booking)
+  table_calendar: ^3.1.2
+
+  # Typography
+  google_fonts: ^6.2.1
+
+  # Ratings UI
+  flutter_rating_bar: ^4.0.1
+
+  # Payments
+  razorpay_flutter: ^1.3.7
+
+  # Push notifications
+  firebase_core: ^3.3.0
+  firebase_messaging: ^15.1.0
+
+  # Authentication
+  #  - Google login: NATIVE google_sign_in → Supabase Auth (signInWithIdToken)
+  #    → backend POST /auth/supabase verifies the Supabase JWT via JWKS and
+  #    issues our own app tokens. Requires the Android SHA-1 registered in
+  #    Google Cloud and the Web client id configured in Supabase → Google.
+  #  - Phone OTP (dormant): firebase_auth.
+  firebase_auth: ^5.3.1
+  google_sign_in: ^6.2.1
+  supabase_flutter: ^2.8.0
+  app_links: ^6.3.0
+
+  # Location
+  geolocator: ^12.0.0
+
+  # Local persistence (remembers the chosen home location across restarts)
+  shared_preferences: ^2.2.0
+
+  # Maps (live booking tracking) — Mapbox native SDK. 2.25 needs compileSdk 36,
+  # forced on all Android modules in android/build.gradle.kts (older 2.x won't
+  # compile with this project's Kotlin 2.3.20).
+  mapbox_maps_flutter: 2.25.0
+
+  # Launch external URLs (tel:, maps, support)
+  url_launcher: ^6.3.0
+
+  # In-app dynamic UPI QR rendering (self-hosted QR payments).
+  qr_flutter: ^4.1.0
+
+  # In-app alert sound (system notification tone) for realtime badges.
+  flutter_ringtone_player: ^4.0.0
+
+  # Short UI sound effects (swipe, send, success…) from bundled assets.
+  audioplayers: ^6.1.0
+
+  # Creates the FCM notification channel that carries our custom tray sound.
+  flutter_local_notifications: ^17.2.3
+
+  # Voice/video calls (Agora RTC) + runtime mic/camera permissions.
+  agora_rtc_engine: ^6.3.2
+  permission_handler: ^11.3.1
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+dependency_overrides:
+  # path_provider_foundation 2.5.0 and 2.6.0 pull `objective_c`, whose native-assets
+  # build hook crashes on Windows paths containing a space (e.g. "Vikash Munda").
+  # 2.5.1 is the newest release WITHOUT that dependency, and the Apple-only impl is
+  # never used on Android anyway — so pin it to drop objective_c from the tree.
+  path_provider_foundation: 2.5.1
+  # Same story: google_sign_in_ios 5.9.0 added the objective_c dependency; 5.8.1
+  # is the last clean version and still satisfies google_sign_in ^6.2's constraint.
+  google_sign_in_ios: 5.8.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/sounds/

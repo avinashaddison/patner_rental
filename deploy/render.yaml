@@ -1,0 +1,151 @@
+# ============================================================================
+# Companion Ranchi — Render Blueprint (one-click stack)
+# ----------------------------------------------------------------------------
+# Provisions: PostgreSQL + backend web service + admin web service.
+#
+# Usage:
+#   1. Push this repo to GitHub.
+#   2. Render dashboard -> New -> Blueprint -> select the repo (Render reads this file).
+#   3. JWT secrets are auto-generated (generateValue). Fill the remaining secrets
+#      flagged `sync: false` (Razorpay live keys, R2, Firebase, MSG91, admin seed)
+#      in each service's Environment tab.
+#   4. Add custom domains api.* and admin.* in each service's settings (auto TLS).
+#
+# The backend runs migrations + seed as a preDeployCommand so app instances never
+# race to migrate. Render's proxy supports WebSockets, so Socket.IO works as-is.
+# ============================================================================
+
+databases:
+  - name: companion-ranchi-db
+    databaseName: companion_ranchi
+    user: companion_app
+    plan: starter # bump to standard/pro for production traffic + PITR
+    postgresMajorVersion: "16"
+
+services:
+  # -------------------------------------------------------------------------
+  # Backend — Node/Express + Prisma + Socket.IO
+  # -------------------------------------------------------------------------
+  - type: web
+    name: companion-backend
+    runtime: node
+    plan: starter
+    rootDir: backend
+    region: singapore # closest Render region to India; adjust as needed
+    healthCheckPath: /health
+    buildCommand: npm ci && npx prisma generate
+    # Apply committed migrations + idempotent seed before the new version serves traffic.
+    preDeployCommand: npx prisma migrate deploy && npm run seed
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: APP_NAME
+        value: Companion Ranchi
+      - key: API_BASE_URL
+        value: https://api.companionranchi.com
+      - key: ADMIN_URL
+        value: https://admin.companionranchi.com
+      # Database — injected from the managed Postgres above.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: companion-ranchi-db
+          property: connectionString
+      # JWT secrets — auto-generated, unique per environment.
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: ADMIN_JWT_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: JWT_REFRESH_TTL
+        value: 30d
+      # OTP / SMS — real SMS in prod.
+      - key: OTP_CONSOLE
+        value: "false"
+      - key: OTP_TTL_SECONDS
+        value: "300"
+      - key: OTP_LENGTH
+        value: "6"
+      - key: OTP_MAX_ATTEMPTS
+        value: "5"
+      - key: MSG91_AUTH_KEY
+        sync: false
+      - key: MSG91_SENDER_ID
+        value: CMPRNC
+      - key: MSG91_TEMPLATE_ID
+        sync: false
+      # Razorpay (LIVE) — fill in dashboard.
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: RAZORPAYX_ACCOUNT_NUMBER
+        sync: false
+      # Cloudflare R2.
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: companion-ranchi
+      - key: R2_PUBLIC_BASE_URL
+        value: https://media.companionranchi.com
+      - key: R2_ENDPOINT
+        sync: false
+      # Firebase FCM. Provide the service-account JSON as a secret file mounted at
+      # /etc/secrets/firebase-service-account.json (Render -> Secret Files).
+      - key: FIREBASE_SERVICE_ACCOUNT
+        value: /etc/secrets/firebase-service-account.json
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      # Business rules.
+      - key: DEFAULT_COMMISSION_RATE
+        value: "20"
+      - key: REFERRAL_REWARD_AMOUNT
+        value: "100"
+      - key: MIN_PAYOUT_AMOUNT
+        value: "500"
+      - key: DEFAULT_CITY
+        value: Ranchi
+      - key: MIN_AGE
+        value: "18"
+      # CORS — allow the admin panel origin.
+      - key: CORS_ORIGINS
+        value: https://admin.companionranchi.com
+      # Admin seed (rotate password after first login).
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+
+  # -------------------------------------------------------------------------
+  # Admin — Next.js panel
+  # -------------------------------------------------------------------------
+  - type: web
+    name: companion-admin
+    runtime: node
+    plan: starter
+    rootDir: admin
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # Build-time API URL (inlined into the client bundle). Point at the backend's
+      # public custom domain once DNS is set.
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://api.companionranchi.com

@@ -1,0 +1,801 @@
+// Companion Ranchi — Prisma schema (PostgreSQL)
+// Source of truth: docs/DATA_MODEL.md. JSON names are camelCase; DB columns snake_case via @map.
+// All ids are UUID v4. Money is Decimal(10,2) INR.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (PgBouncer, port 6543) for app runtime.
+  url       = env("DATABASE_URL")
+  // Direct connection (port 5432) used by Prisma for migrations. On Supabase the
+  // pooled URL can't run migrations, so this must be the non-pooled URL.
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum Role {
+  CUSTOMER
+  COMPANION
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum KycStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum KycDocType {
+  GOVERNMENT_ID
+  SELFIE
+}
+
+enum CompanionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  CREATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
+  PAYOUT
+  REFUND
+  COMMISSION
+  REFERRAL_REWARD
+  BOOKING_EARNING
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum PayoutMethod {
+  BANK_TRANSFER
+  UPI
+}
+
+enum PayoutStatus {
+  REQUESTED
+  PROCESSING
+  COMPLETED
+  FAILED
+  REJECTED
+}
+
+enum ReportCategory {
+  HARASSMENT
+  FAKE_PROFILE
+  ABUSE
+  SPAM
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  BOOKING
+  PAYMENT
+  CHAT
+  SYSTEM
+  KYC
+  REVIEW
+  REFERRAL
+  SOS
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+}
+
+enum SosStatus {
+  ACTIVE
+  RESOLVED
+  CANCELLED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  SUPPORT
+  FINANCE
+}
+
+enum ReferralStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+// ============================================================================
+// Models
+// ============================================================================
+
+model User {
+  id               String    @id @default(uuid())
+  // Optional: users may sign up with Google (email identity, no phone) or phone.
+  mobileNumber     String?   @unique @map("mobile_number")
+  fullName         String?   @map("full_name")
+  gender           Gender?
+  dateOfBirth      DateTime? @map("date_of_birth") @db.Date
+  city             String?
+  email            String?   @unique
+  // Public @handle chosen at profile creation. Nullable so pre-existing accounts
+  // (created before this feature) stay valid; unique + stored lowercase.
+  username         String?   @unique
+  role             Role      @default(CUSTOMER)
+  // OAuth identity (Supabase Auth). authProvider e.g. "google"; supabaseUserId is the Supabase `sub`.
+  // Columns already exist in the live DB (added via targeted SQL) — do NOT `db push`.
+  authProvider     String?   @map("auth_provider")
+  supabaseUserId   String?   @unique @map("supabase_user_id")
+  isMobileVerified Boolean   @default(false) @map("is_mobile_verified")
+  profilePhotoUrl  String?   @map("profile_photo_url")
+  fcmToken         String?   @map("fcm_token")
+  isBlocked        Boolean   @default(false) @map("is_blocked")
+  blockedReason    String?   @map("blocked_reason")
+  referralCode     String    @unique @map("referral_code")
+  referredById     String?   @map("referred_by_id")
+  lastActiveAt     DateTime? @map("last_active_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  referredBy User?  @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals  User[] @relation("UserReferrals")
+
+  companion         Companion?
+  wallet            Wallet?
+  kycDocuments      KycDocument[]
+  bookingsAsCustomer Booking[]    @relation("CustomerBookings")
+  payments          Payment[]
+  transactions      Transaction[]
+  payouts           Payout[]
+  reviews           Review[]
+  notifications     Notification[]
+  conversationsAsCustomer Conversation[] @relation("ConversationCustomer")
+  conversationsAsCompanion Conversation[] @relation("ConversationCompanionUser")
+  messagesSent      Message[]    @relation("MessagesSent")
+  messagesReceived  Message[]    @relation("MessagesReceived")
+  reportsMade       Report[]     @relation("ReportsMade")
+  reportsReceived   Report[]     @relation("ReportsReceived")
+  blocksMade        Block[]      @relation("BlocksMade")
+  blocksReceived    Block[]      @relation("BlocksReceived")
+  supportTickets    SupportTicket[]
+  ticketMessages    TicketMessage[]
+  referralsMade     Referral[]   @relation("ReferralReferrer")
+  referralReceived  Referral?    @relation("ReferralReferred")
+  sosAlerts         SosAlert[]
+  postLikes         PostLike[]
+  postComments      PostComment[]
+  following         Follow[]
+
+  @@index([role])
+  @@index([city])
+  @@index([referredById])
+  @@map("users")
+}
+
+model Companion {
+  id            String          @id @default(uuid())
+  userId        String          @unique @map("user_id")
+  aboutMe       String?         @map("about_me")
+  languages     String[]        @default([])
+  interests     String[]        @default([])
+  hourlyRate    Decimal         @default(0) @map("hourly_rate") @db.Decimal(10, 2)
+  city          String
+  status        CompanionStatus @default(PENDING)
+  isOnline      Boolean         @default(false) @map("is_online")
+  ratingAvg     Float           @default(0) @map("rating_avg")
+  ratingCount   Int             @default(0) @map("rating_count")
+  totalBookings Int             @default(0) @map("total_bookings")
+  totalEarnings Decimal         @default(0) @map("total_earnings") @db.Decimal(10, 2)
+  isFeatured    Boolean         @default(false) @map("is_featured")
+  followerCount Int             @default(0) @map("follower_count")
+  postCount     Int             @default(0) @map("post_count")
+  latitude      Float?
+  longitude     Float?
+  approvedAt    DateTime?       @map("approved_at")
+  rejectedReason String?        @map("rejected_reason")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  user         User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photos       CompanionPhoto[]
+  categories   CompanionCategory[]
+  availability CompanionAvailability[]
+  bookings     Booking[]
+  reviews      Review[]
+  posts        Post[]
+  followers    Follow[]
+
+  @@index([status])
+  @@index([city])
+  @@index([isFeatured])
+  @@index([isOnline])
+  @@map("companions")
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  name      String
+  iconUrl   String?  @map("icon_url")
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  companions CompanionCategory[]
+  bookings   Booking[]
+
+  @@map("categories")
+}
+
+model CompanionPhoto {
+  id          String   @id @default(uuid())
+  companionId String   @map("companion_id")
+  photoUrl    String   @map("photo_url")
+  isPrimary   Boolean  @default(false) @map("is_primary")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  companion Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
+
+  @@index([companionId])
+  @@map("companion_photos")
+}
+
+model CompanionCategory {
+  id          String @id @default(uuid())
+  companionId String @map("companion_id")
+  categoryId  String @map("category_id")
+
+  companion Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([companionId, categoryId])
+  @@index([categoryId])
+  @@map("companion_categories")
+}
+
+model CompanionAvailability {
+  id          String  @id @default(uuid())
+  companionId String  @map("companion_id")
+  dayOfWeek   Int     @map("day_of_week")
+  startTime   String  @map("start_time")
+  endTime     String  @map("end_time")
+  isAvailable Boolean @default(true) @map("is_available")
+
+  companion Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
+
+  @@index([companionId])
+  @@map("companion_availability")
+}
+
+model KycDocument {
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  docType        KycDocType @map("doc_type")
+  documentUrl    String    @map("document_url")
+  documentNumber String?   @map("document_number")
+  status         KycStatus @default(PENDING)
+  reviewedById   String?   @map("reviewed_by_id")
+  reviewNotes    String?   @map("review_notes")
+  reviewedAt     DateTime? @map("reviewed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("kyc_documents")
+}
+
+model Booking {
+  id                 String        @id @default(uuid())
+  bookingCode        String        @unique @map("booking_code")
+  customerId         String        @map("customer_id")
+  companionId        String        @map("companion_id")
+  categoryId         String?       @map("category_id")
+  activity           String
+  durationHours      Int           @map("duration_hours")
+  bookingDate        DateTime      @map("booking_date") @db.Date
+  startTime          String        @map("start_time")
+  endTime            String        @map("end_time")
+  meetingLocation    String        @map("meeting_location")
+  meetingPlaceType   String        @map("meeting_place_type")
+  hourlyRate         Decimal       @map("hourly_rate") @db.Decimal(10, 2)
+  totalAmount        Decimal       @map("total_amount") @db.Decimal(10, 2)
+  commissionRate     Float         @map("commission_rate")
+  commissionAmount   Decimal       @map("commission_amount") @db.Decimal(10, 2)
+  companionPayout    Decimal       @map("companion_payout") @db.Decimal(10, 2)
+  status             BookingStatus @default(PENDING)
+  notes              String?
+  // Meet-at-location start verification: a 6-digit code shown to the CUSTOMER once a
+  // booking is CONFIRMED. The companion enters it to flip the booking to IN_PROGRESS,
+  // proving both parties are physically together. Never exposed to the companion.
+  startCode          String?       @map("start_code")
+  startCodeAttempts  Int           @default(0) @map("start_code_attempts")
+  startedAt          DateTime?     @map("started_at")
+  startVerifiedById  String?       @map("start_verified_by_id")
+  cancelledById      String?       @map("cancelled_by_id")
+  cancellationReason String?       @map("cancellation_reason")
+  completedAt        DateTime?     @map("completed_at")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  customer      User                   @relation("CustomerBookings", fields: [customerId], references: [id])
+  companion     Companion              @relation(fields: [companionId], references: [id])
+  category      Category?              @relation(fields: [categoryId], references: [id])
+  payment       Payment?
+  review        Review?
+  statusHistory BookingStatusHistory[]
+  transactions  Transaction[]
+
+  @@index([customerId])
+  @@index([companionId])
+  @@index([status])
+  @@index([bookingDate])
+  @@map("bookings")
+}
+
+model BookingStatusHistory {
+  id          String        @id @default(uuid())
+  bookingId   String        @map("booking_id")
+  status      BookingStatus
+  changedById String?       @map("changed_by_id")
+  note        String?
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@map("booking_status")
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  bookingId         String        @unique @map("booking_id")
+  customerId        String        @map("customer_id")
+  razorpayOrderId   String?       @map("razorpay_order_id")
+  razorpayPaymentId String?       @map("razorpay_payment_id")
+  razorpaySignature String?       @map("razorpay_signature")
+  amount            Decimal       @db.Decimal(10, 2)
+  currency          String        @default("INR")
+  status            PaymentStatus @default(CREATED)
+  method            String        @default("razorpay")
+  capturedAt        DateTime?     @map("captured_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  booking  Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customer User    @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@index([razorpayOrderId])
+  @@index([status])
+  @@map("payments")
+}
+
+model Wallet {
+  id             String   @id @default(uuid())
+  userId         String   @unique @map("user_id")
+  balance        Decimal  @default(0) @db.Decimal(10, 2)
+  pendingBalance Decimal  @default(0) @map("pending_balance") @db.Decimal(10, 2)
+  totalEarned    Decimal  @default(0) @map("total_earned") @db.Decimal(10, 2)
+  totalWithdrawn Decimal  @default(0) @map("total_withdrawn") @db.Decimal(10, 2)
+  currency       String   @default("INR")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("wallet")
+}
+
+model Transaction {
+  id           String            @id @default(uuid())
+  walletId     String            @map("wallet_id")
+  userId       String            @map("user_id")
+  bookingId    String?           @map("booking_id")
+  type         TransactionType
+  amount       Decimal           @db.Decimal(10, 2)
+  balanceAfter Decimal           @map("balance_after") @db.Decimal(10, 2)
+  status       TransactionStatus @default(COMPLETED)
+  reference    String?
+  description  String?
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  wallet  Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id])
+  booking Booking? @relation(fields: [bookingId], references: [id])
+
+  @@index([walletId])
+  @@index([userId])
+  @@index([bookingId])
+  @@index([type])
+  @@map("transactions")
+}
+
+model Payout {
+  id                String       @id @default(uuid())
+  userId            String       @map("user_id")
+  amount            Decimal      @db.Decimal(10, 2)
+  method            PayoutMethod
+  bankAccountName   String?      @map("bank_account_name")
+  bankAccountNumber String?      @map("bank_account_number")
+  ifsc              String?
+  upiId             String?      @map("upi_id")
+  status            PayoutStatus @default(REQUESTED)
+  processedById     String?      @map("processed_by_id")
+  notes             String?
+  processedAt       DateTime?    @map("processed_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@map("payouts")
+}
+
+model Review {
+  id                  String   @id @default(uuid())
+  bookingId           String   @unique @map("booking_id")
+  customerId          String   @map("customer_id")
+  companionId         String   @map("companion_id")
+  behaviourRating     Int      @map("behaviour_rating")
+  communicationRating Int      @map("communication_rating")
+  punctualityRating   Int      @map("punctuality_rating")
+  overallRating       Float    @map("overall_rating")
+  comment             String?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customer  User      @relation(fields: [customerId], references: [id])
+  companion Companion @relation(fields: [companionId], references: [id])
+
+  @@index([companionId])
+  @@index([customerId])
+  @@map("reviews")
+}
+
+model Conversation {
+  id            String    @id @default(uuid())
+  customerId    String    @map("customer_id")
+  companionId   String    @map("companion_id")
+  bookingId     String?   @map("booking_id")
+  lastMessage   String?   @map("last_message")
+  lastMessageAt DateTime? @map("last_message_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  customer  User      @relation("ConversationCustomer", fields: [customerId], references: [id])
+  companion User      @relation("ConversationCompanionUser", fields: [companionId], references: [id])
+  messages  Message[]
+
+  @@unique([customerId, companionId])
+  @@index([customerId])
+  @@index([companionId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String      @id @default(uuid())
+  conversationId String      @map("conversation_id")
+  senderId       String      @map("sender_id")
+  receiverId     String      @map("receiver_id")
+  type           MessageType @default(TEXT)
+  content        String?
+  imageUrl       String?     @map("image_url")
+  isRead         Boolean     @default(false) @map("is_read")
+  readAt         DateTime?   @map("read_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("MessagesSent", fields: [senderId], references: [id])
+  receiver     User         @relation("MessagesReceived", fields: [receiverId], references: [id])
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@map("messages")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model Report {
+  id              String         @id @default(uuid())
+  reporterId      String         @map("reporter_id")
+  reportedUserId  String         @map("reported_user_id")
+  bookingId       String?        @map("booking_id")
+  category        ReportCategory
+  description     String?
+  status          ReportStatus   @default(OPEN)
+  reviewedById    String?        @map("reviewed_by_id")
+  resolutionNotes String?        @map("resolution_notes")
+  resolvedAt      DateTime?      @map("resolved_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  reporter     User @relation("ReportsMade", fields: [reporterId], references: [id])
+  reportedUser User @relation("ReportsReceived", fields: [reportedUserId], references: [id])
+
+  @@index([reporterId])
+  @@index([reportedUserId])
+  @@index([status])
+  @@map("reports")
+}
+
+model Block {
+  id        String   @id @default(uuid())
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker User @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+  @@map("blocks")
+}
+
+model SupportTicket {
+  id           String         @id @default(uuid())
+  userId       String         @map("user_id")
+  subject      String
+  description  String
+  status       TicketStatus   @default(OPEN)
+  priority     TicketPriority @default(MEDIUM)
+  assignedToId String?        @map("assigned_to_id")
+  resolvedAt   DateTime?      @map("resolved_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages TicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id        String   @id @default(uuid())
+  ticketId  String   @map("ticket_id")
+  senderId  String   @map("sender_id")
+  message   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [senderId], references: [id])
+
+  @@index([ticketId])
+  @@map("ticket_messages")
+}
+
+model Referral {
+  id                 String         @id @default(uuid())
+  referrerId         String         @map("referrer_id")
+  referredId         String         @unique @map("referred_id")
+  status             ReferralStatus @default(PENDING)
+  rewardAmount       Decimal        @default(100) @map("reward_amount") @db.Decimal(10, 2)
+  rewarded           Boolean        @default(false)
+  qualifyingBookingId String?       @map("qualifying_booking_id")
+  rewardedAt         DateTime?      @map("rewarded_at")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  referrer User @relation("ReferralReferrer", fields: [referrerId], references: [id])
+  referred User @relation("ReferralReferred", fields: [referredId], references: [id])
+
+  @@index([referrerId])
+  @@map("referrals")
+}
+
+model SosAlert {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  bookingId    String?   @map("booking_id")
+  latitude     Float?
+  longitude    Float?
+  status       SosStatus @default(ACTIVE)
+  message      String?
+  resolvedById String?   @map("resolved_by_id")
+  resolvedAt   DateTime? @map("resolved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("sos_alerts")
+}
+
+model AdminUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         AdminRole @default(ADMIN)
+  permissions  String[]  @default([])
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("admin_users")
+}
+
+model Setting {
+  id           String   @id @default(uuid())
+  key          String   @unique
+  value        Json
+  description  String?
+  updatedById  String?  @map("updated_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+model OtpVerification {
+  id           String   @id @default(uuid())
+  mobileNumber String   @map("mobile_number")
+  otpHash      String   @map("otp_hash")
+  purpose      String   @default("login")
+  expiresAt    DateTime @map("expires_at")
+  verified     Boolean  @default(false)
+  attempts     Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([mobileNumber])
+  @@map("otp_verifications")
+}
+
+// --- Social: Instagram-style posts, likes, comments, follows -----------------
+
+enum PostStatus {
+  PUBLISHED
+  REMOVED // hidden by admin moderation
+}
+
+// A companion-authored photo post (carousel of 1+ images + caption).
+model Post {
+  id           String     @id @default(uuid())
+  companionId  String     @map("companion_id")
+  caption      String?
+  images       String[]   @default([]) // ordered R2 public URLs
+  status       PostStatus @default(PUBLISHED)
+  likeCount    Int        @default(0) @map("like_count")
+  commentCount Int        @default(0) @map("comment_count")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  companion Companion     @relation(fields: [companionId], references: [id], onDelete: Cascade)
+  likes     PostLike[]
+  comments  PostComment[]
+
+  @@index([companionId])
+  @@index([status, createdAt])
+  @@map("posts")
+}
+
+// A user's like on a post (one per user per post).
+model PostLike {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@map("post_likes")
+}
+
+// A user's comment on a post.
+model PostComment {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@map("post_comments")
+}
+
+// A user following a companion.
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String   @map("follower_id")  // the User who follows
+  companionId String   @map("companion_id") // the followed Companion
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  follower  User      @relation(fields: [followerId], references: [id], onDelete: Cascade)
+  companion Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, companionId])
+  @@index([companionId])
+  @@map("follows")
+}

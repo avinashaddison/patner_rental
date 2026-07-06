@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: #fb2c63;
+  --brand-50: #fff1f4;
+  --ink: #0a0a0a;
+}
+
+@layer base {
+  html,
+  body {
+    @apply h-full;
+  }
+
+  body {
+    @apply text-ink antialiased;
+    /* Flat warm-white canvas with a subtle brutalist dot grid. */
+    background-color: #fdfcf7;
+    background-image: radial-gradient(rgba(10, 10, 10, 0.07) 1.2px, transparent 1.2px);
+    background-size: 20px 20px;
+  }
+
+  /* Brutalism: black borders by default. */
+  * {
+    @apply border-ink;
+  }
+
+  /* Hard focus ring (offset, high contrast). */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white;
+  }
+}
+
+@layer components {
+  /* Chunky black scrollbar for sidebars / tables. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #0a0a0a transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply rounded-none bg-ink;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  /* Flat brand fill (brutalism avoids gradients). Kept for legacy callers. */
+  .brand-gradient {
+    background-color: #fb2c63;
+  }
+  /* Loud display heading. */
+  .text-display {
+    @apply font-black uppercase tracking-tight;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+}

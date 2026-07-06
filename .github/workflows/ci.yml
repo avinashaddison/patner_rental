@@ -1,0 +1,150 @@
+name: CI
+
+# Build, lint and test the three workspaces: backend (Node/Express + Prisma),
+# admin (Next.js), mobile (Flutter). Each job is independent so failures are isolated.
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # =========================================================================
+  # Backend — Node.js / Express / Prisma
+  # =========================================================================
+  backend:
+    name: Backend (Node)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    # Spin up Postgres so prisma + tests can run against a real DB.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: companion
+          POSTGRES_PASSWORD: companion
+          POSTGRES_DB: companion_ranchi_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U companion -d companion_ranchi_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Test DB + safe placeholders so config validation (zod) passes in CI.
+      DATABASE_URL: postgresql://companion:companion@localhost:5432/companion_ranchi_test?schema=public
+      NODE_ENV: test
+      OTP_CONSOLE: "true"
+      JWT_ACCESS_SECRET: ci_access_secret_ci_access_secret_0000000000
+      JWT_REFRESH_SECRET: ci_refresh_secret_ci_refresh_secret_000000000
+      ADMIN_JWT_SECRET: ci_admin_secret_ci_admin_secret_00000000000
+      RAZORPAY_KEY_ID: rzp_test_ci
+      RAZORPAY_KEY_SECRET: ci_secret
+      RAZORPAY_WEBHOOK_SECRET: ci_webhook_secret
+      CORS_ORIGINS: http://localhost:3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Apply migrations (test DB)
+        run: npx prisma migrate deploy
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Test
+        run: npm test --if-present
+
+  # =========================================================================
+  # Admin — Next.js
+  # =========================================================================
+  admin:
+    name: Admin (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+
+    env:
+      # Build-time public API URL (placeholder for CI build).
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:4000
+      # Skip Next.js anonymous telemetry in CI.
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Build
+        run: npm run build
+
+  # =========================================================================
+  # Mobile — Flutter
+  # =========================================================================
+  mobile:
+    name: Mobile (Flutter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.22.x"
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test --no-pub

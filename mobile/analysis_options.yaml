@@ -1,0 +1,24 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # Treat missing required parameters and undefined references as errors (defaults),
+    # keep style issues as warnings so the skeleton stays buildable.
+    invalid_annotation_target: ignore
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "lib/firebase_options.dart"
+
+linter:
+  rules:
+    prefer_const_constructors: true
+    prefer_const_constructors_in_immutables: true
+    prefer_const_declarations: true
+    prefer_final_fields: true
+    avoid_print: true
+    use_key_in_widget_constructors: true
+    sized_box_for_whitespace: true
+    sort_child_properties_last: true
+    # Allow relative imports off so we always use package: imports.
+    always_use_package_imports: true

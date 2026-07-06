@@ -1,0 +1,47 @@
+# Node
+node_modules/
+dist/
+build/
+coverage/
+*.log
+npm-debug.log*
+
+# Env / secrets — ignore every env variant + backups, keep only examples.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.bak
+*.bak.*
+*.pem
+*.key
+serviceAccountKey.json
+firebase-service-account.json
+google-services.json
+GoogleService-Info.plist
+
+# Prisma
+backend/prisma/*.db
+
+# Next.js
+admin/.next/
+admin/out/
+
+# Flutter
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/build/
+mobile/.idea/
+mobile/android/.gradle/
+mobile/android/app/google-services.json
+mobile/ios/Pods/
+mobile/ios/Runner/GoogleService-Info.plist
+mobile/*.iml
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
+*.hprof
