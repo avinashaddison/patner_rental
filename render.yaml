@@ -67,3 +67,21 @@ services:
         sync: false
       - key: UPIGATEWAY_KEY
         sync: false
+
+  # Admin panel (Next.js). Talks to the API above via NEXT_PUBLIC_API_BASE_URL.
+  # After it deploys, add its URL to the API's CORS_ORIGINS.
+  - type: web
+    name: companion-ranchi-admin
+    runtime: node
+    region: singapore
+    plan: starter
+    rootDir: admin
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Inlined at build time by Next.js — set to the API service's URL.
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://patner-rental.onrender.com
