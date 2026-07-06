@@ -76,7 +76,10 @@ services:
     region: singapore
     plan: starter
     rootDir: admin
-    buildCommand: npm install && npm run build
+    # --include=dev is required: NODE_ENV=production would otherwise skip
+    # devDependencies (tailwindcss, postcss, typescript, @types) that Next.js
+    # needs at build time.
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     autoDeploy: true
     envVars:
