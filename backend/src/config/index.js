@@ -62,8 +62,6 @@ const envSchema = z.object({
   R2_PUBLIC_BASE_URL: z.string().default('https://media.companionranchi.com'),
   R2_ENDPOINT: z.string().optional(),
 
-  CLOUDINARY_URL: z.string().optional(),
-
   // Mapbox access token — used by the tracking proxy for Directions (route +
   // ETA) and Geocoding (meeting-place autocomplete). Optional: when unset the
   // proxy returns no route/suggestions and the client degrades gracefully.
@@ -161,10 +159,6 @@ export const config = {
     bucket: env.R2_BUCKET,
     publicBaseUrl: env.R2_PUBLIC_BASE_URL,
     endpoint: env.R2_ENDPOINT || '',
-  },
-
-  cloudinary: {
-    url: env.CLOUDINARY_URL,
   },
 
   maps: {

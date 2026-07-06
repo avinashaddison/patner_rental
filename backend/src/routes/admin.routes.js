@@ -15,6 +15,7 @@ import {
   companionListQuerySchema,
   rejectReasonSchema,
   featureSchema,
+  addCompanionKycSchema,
   kycQuerySchema,
   bookingListQuerySchema,
   cancelBookingSchema,
@@ -35,7 +36,7 @@ import {
 
 const router = Router();
 
-// In-memory upload for category icons; streamed straight to Cloudinary (5 MB cap).
+// In-memory upload for category icons; streamed to R2 (5 MB cap).
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // ---- Auth (login is public; me requires admin) ----------------------------
@@ -68,6 +69,14 @@ router.post('/companions/:id/approve', asyncHandler(ctrl.approveCompanion));
 router.post('/companions/:id/reject', validate(rejectReasonSchema), asyncHandler(ctrl.rejectCompanion));
 router.post('/companions/:id/suspend', validate(rejectReasonSchema), asyncHandler(ctrl.suspendCompanion));
 router.post('/companions/:id/feature', validate(featureSchema), asyncHandler(ctrl.featureCompanion));
+// Admin manually uploads a KYC document (multipart image + docType), recorded as
+// approved. multer parses the form BEFORE validate reads req.body.
+router.post(
+  '/companions/:id/kyc',
+  upload.single('image'),
+  validate(addCompanionKycSchema),
+  asyncHandler(ctrl.addCompanionKyc),
+);
 
 // ---- KYC ------------------------------------------------------------------
 

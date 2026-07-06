@@ -67,6 +67,13 @@ export const featureSchema = z.object({
   isFeatured: z.boolean(),
 });
 
+// POST /admin/companions/:id/kyc — admin manually adds a KYC document (multipart:
+// an `image` file plus these body fields). docType picks which document it is.
+export const addCompanionKycSchema = z.object({
+  docType: z.enum(['GOVERNMENT_ID', 'SELFIE']),
+  documentNumber: z.string().trim().max(60).optional(),
+});
+
 // ---- KYC ------------------------------------------------------------------
 
 export const kycQuerySchema = z.object({

@@ -16,6 +16,7 @@ import { notify } from './notification.service.js';
 import { isKycApproved } from './companions.service.js';
 import { emitToUser } from '../lib/socket.js';
 import { invalidateUserCache } from '../middleware/auth.js';
+import { uploadImageBuffer } from '../lib/r2.js';
 
 const { Prisma } = pkg;
 const D = (v) => new Prisma.Decimal(v ?? 0);
@@ -649,6 +650,46 @@ export async function featureCompanion(id, isFeatured, adminId) {
   });
   logger.info(`[admin] companion ${id} featured=${isFeatured} by admin ${adminId}`);
   return serializeCompanion(updated);
+}
+
+/**
+ * Admin manually adds a KYC document for a companion (e.g. onboarded offline).
+ * Uploads the image to R2, records it as an APPROVED, admin-verified
+ * document, and auto-approves the companion if both docs are now approved and
+ * they were still PENDING.
+ * @param {string} companionId
+ * @param {{docType:'GOVERNMENT_ID'|'SELFIE', documentNumber?:string, buffer:Buffer}} input
+ */
+export async function addCompanionKyc(companionId, { docType, documentNumber, buffer, contentType }, adminId) {
+  const companion = await loadCompanionOrThrow(companionId);
+  const userId = companion.userId;
+
+  const documentUrl = await uploadImageBuffer({
+    buffer,
+    contentType,
+    folder: 'companion-ranchi/kyc',
+    publicId: `kyc-${userId}-${docType.toLowerCase()}-${Date.now()}`,
+  });
+
+  const doc = await prisma.kycDocument.create({
+    data: {
+      userId,
+      docType,
+      documentUrl,
+      documentNumber: documentNumber || null,
+      status: 'APPROVED',
+      reviewedById: adminId,
+      reviewedAt: new Date(),
+      reviewNotes: 'Added and verified by admin',
+    },
+  });
+
+  // If both required docs are now approved and the companion is still PENDING,
+  // this promotes them to APPROVED automatically.
+  await maybeAutoApproveCompanion(userId);
+
+  logger.info(`[admin] KYC ${docType} added for companion ${companionId} by admin ${adminId}`);
+  return serializeKycDoc(doc);
 }
 
 // ---------------------------------------------------------------------------
